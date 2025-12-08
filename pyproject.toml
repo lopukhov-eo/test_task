@@ -1,0 +1,14 @@
+[project]
+name = "test-task"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "asyncpg==0.30.0",
+    "colorlog>=6.10.1",
+    "fastapi==0.115.6",
+    "pre-commit>=4.5.0",
+    "python-dotenv>=1.2.1",
+    "uvicorn==0.34.0",
+]
