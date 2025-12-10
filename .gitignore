@@ -2,3 +2,5 @@
 .venv/
 uv.lock
 .env
+clickhouse_data/
+clickhouse_logs/
