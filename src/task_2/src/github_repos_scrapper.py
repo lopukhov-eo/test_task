@@ -2,21 +2,22 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from aiohttp import ClientSession, ClientError
+from aiohttp import ClientError, ClientSession
 
-from config import GITHUB_API_BASE_URL, Repository, RepositoryAuthorCommitsNum
-from rate_limiter import RateLimiter
 from src.config.logger import logger
+from src.task_2.src.config import GITHUB_API_BASE_URL
+from src.task_2.src.models.repository import Repository, RepositoryAuthorCommitsNum
+from src.task_2.src.rate_limiter import RateLimiter
 
 
 class GithubReposScrapper:
     """
-    Класс для получения информации о топовых GitHub-репозиториях
-    и подсчёта числа коммитов авторов за последние 24 часа.
+    Класс для получения информации о топовых GitHub-репозиториях и подсчёта числа коммитов авторов за последние 24 часа.
 
     :param access_token: GitHub Personal Access Token
-    :param max_concurrent_requests: Ограничение одновременных запросов (MCR)
+    :param max_concurrent_requests: Максимальное количество одновременных HTTP-запросов
     :param requests_per_second: Ограничение числа запросов в секунду (RPS)
+    :return:
     """
 
     def __init__(
@@ -26,6 +27,14 @@ class GithubReposScrapper:
         max_concurrent_requests: int | None = None,
         requests_per_second: int | None = None,
     ):
+        """
+        Инициализация GitHub скрейпера.
+
+        :param access_token: GitHub Personal Access Token
+        :param max_concurrent_requests: Максимум одновременных запросов (Semaphore)
+        :param requests_per_second: Ограничение RPS для GitHub API
+        :return:
+        """
         logger.info(
             "Инициализация GithubReposScrapper",
             extra={
@@ -44,6 +53,25 @@ class GithubReposScrapper:
         self._mcr = asyncio.Semaphore(max_concurrent_requests or 10)
         self._rate_limiter = RateLimiter(requests_per_second or 5)
 
+    async def __aenter__(self):
+        """
+        Вход в контекстный менеджер.
+
+        :return: self
+        """
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        """
+        Выход из контекстного менеджера. Закрывает HTTP-сессию.
+
+        :param exc_type: Тип исключения
+        :param exc: Исключение
+        :param tb: Traceback
+        :return:
+        """
+        await self.close()
+
     async def _safe_request(
         self,
         method: str,
@@ -52,14 +80,13 @@ class GithubReposScrapper:
         params: dict[str, Any] | None = None,
     ) -> Any:
         """
-        Выполняет безопасный запрос к GitHub API.
+        Выполняет безопасный запрос к GitHub API с обработкой ошибок.
 
         :param method: HTTP-метод (GET / POST)
         :param endpoint: API endpoint GitHub
         :param params: Параметры запроса
-        :return: JSON-ответ
+        :return: JSON-ответ GitHub API
         """
-
         url = f"{GITHUB_API_BASE_URL.rstrip('/')}/{endpoint.lstrip('/')}"
 
         async with self._mcr:
@@ -93,20 +120,24 @@ class GithubReposScrapper:
                             "Клиентская ошибка GitHub API",
                             extra={"status": resp.status, "url": url, "response": text},
                         )
-                        raise RuntimeError(
-                            f"Client error {resp.status}: {text}"
-                        )
+                        raise RuntimeError(f"Client error {resp.status}: {text}")
 
                     data = await resp.json()
                     logger.info("Запрос успешно выполнен", extra={"url": url})
                     return data
 
             except ClientError as e:
-                logger.error("Сетевая ошибка GitHub API", extra={"url": url, "error": str(e)})
+                logger.error(
+                    "Сетевая ошибка GitHub API",
+                    extra={"url": url, "error": str(e)},
+                )
                 raise RuntimeError(f"Network error: {e}") from e
 
             except Exception as e:
-                logger.error("Непредвиденная ошибка при запросе", extra={"url": url, "error": str(e)})
+                logger.error(
+                    "Непредвиденная ошибка при запросе",
+                    extra={"url": url, "error": str(e)},
+                )
                 raise
 
     async def _make_request(
@@ -116,21 +147,21 @@ class GithubReposScrapper:
         params: dict[str, Any] | None = None,
     ) -> Any:
         """
-        Wrapper над _safe_request.
+        Обёртка над _safe_request.
 
         :param endpoint: API endpoint GitHub
-        :param method: HTTP метод
+        :param method: HTTP-метод
         :param params: Параметры запроса
-        :return: JSON-ответ
+        :return: JSON-ответ GitHub API
         """
         return await self._safe_request(method, endpoint, params=params)
 
     async def _get_top_repositories(self, limit: int = 100) -> list[dict[str, Any]]:
         """
-        Получение топовых GitHub-репозиториев по звёздам.
+        Получение списка топовых GitHub репозиториев по числу звёзд.
 
-        :param limit: Количество репозиториев
-        :return: Список словарей репозиториев
+        :param limit: Количество запрашиваемых репозиториев
+        :return: Список словарей с данными репозиториев
         """
         logger.info("Запрос топовых репозиториев", extra={"limit": limit})
 
@@ -145,13 +176,15 @@ class GithubReposScrapper:
         )
         return data["items"]
 
-    async def _get_repository_commits(self, owner: str, repo: str) -> list[dict[str, Any]]:
+    async def _get_repository_commits(
+        self, owner: str, repo: str
+    ) -> list[dict[str, Any]]:
         """
         Получение списка коммитов репозитория за последние 24 часа.
 
-        :param owner: Владелец репозитория
+        :param owner: Логин владельца репозитория
         :param repo: Имя репозитория
-        :return: Список коммитов
+        :return: Список словарей коммитов
         """
         since = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
 
@@ -167,7 +200,7 @@ class GithubReposScrapper:
 
     async def get_repositories(self, limit: int = 100) -> list[Repository]:
         """
-        Получение списка Repository, включая подсчёт коммитов авторов за сутки.
+        Получение списка Repository, включая подсчёт коммитов авторов за последние 24 часа.
 
         :param limit: Количество репозиториев
         :return: Список объектов Repository
@@ -177,6 +210,13 @@ class GithubReposScrapper:
         repos_data = await self._get_top_repositories(limit)
 
         async def process_repo(repo: dict[str, Any], position: int) -> Repository:
+            """
+            Обрабатывает один репозиторий: получает коммиты и формирует объект Repository.
+
+            :param repo: Сырые данные репозитория из GitHub API
+            :param position: Позиция в топе
+            :return: Объект Repository
+            """
             owner = repo["owner"]["login"]
             repo_name = repo["name"]
 
@@ -225,7 +265,9 @@ class GithubReposScrapper:
 
     async def close(self):
         """
-        Закрытие HTTP-сессии.
+        Закрытие HTTP-сессии GitHub клиента.
+
+        :return:
         """
         logger.info("Закрытие GitHub HTTP-сессии")
         await self._session.close()

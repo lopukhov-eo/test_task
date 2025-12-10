@@ -1,15 +1,18 @@
 import asyncio
 
 from github_repos_scrapper import GithubReposScrapper
-from src.config.logger import logger
+
 from config import (
     GITHUB_TOKEN,
     MAX_CONCURRENT_REQUESTS,
+    REPOSITORIES_PER_PAGE,
     REQUESTS_PER_SECOND,
-    REPOSITORIES_PER_PAGE
 )
+from src.config.logger import logger
+
 
 async def main():
+    """Запускает GitHub скрейпер, получает репозитории и выводит первые 5."""
     logger.info("Starting GitHub repos scrapper...")
     scrapper = GithubReposScrapper(
         access_token=GITHUB_TOKEN,
@@ -23,6 +26,7 @@ async def main():
         logger.info(repo)
 
     await scrapper.close()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -1,4 +1,5 @@
 import asyncio
+
 from src.config.logger import logger
 
 
@@ -11,6 +12,12 @@ class RateLimiter:
     """
 
     def __init__(self, rate_limit: int):
+        """
+        Инициализация лимитера запросов.
+
+        :param rate_limit: Максимальное число разрешённых операций в секунду
+        :return:
+        """
         self._rate_limit = rate_limit
         self._lock = asyncio.Semaphore(rate_limit)
         self._running = True
@@ -24,9 +31,7 @@ class RateLimiter:
         self._reset_task = asyncio.create_task(self._reset_loop())
 
     async def _reset_loop(self) -> None:
-        """
-        Циклически восстанавливает лимит (каждую секунду).
-        """
+        """Циклически восстанавливает лимит (каждую секунду)."""
         logger.info("Запуск внутреннего цикла RateLimiter")
 
         try:
