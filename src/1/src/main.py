@@ -12,7 +12,7 @@ from fastapi import (
 )
 from contextlib import asynccontextmanager
 
-from src.config.config import (
+from config import (
     MIN_SIZE_POOL,
     MAX_SIZE_POOL,
     TIMEOUT,

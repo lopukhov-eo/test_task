@@ -3,11 +3,8 @@ import os
 
 from dotenv import load_dotenv
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(BASE_DIR, '..', '..', 'config.ini')
-
 config = configparser.ConfigParser()
-config.read(os.path.abspath(CONFIG_PATH))
+config.read('../config.ini')
 
 MIN_SIZE_POOL = config['database'].getint('min_size_pool')
 MAX_SIZE_POOL = config['database'].getint('max_size_pool')
